@@ -89,13 +89,12 @@ class XrfStreamViewer(StreamViewer):
     def new_stream_block(self, stream_block):
         if stream_block.row() == 0 and stream_block.col() == 0:
             self.xrfWidget.initialize_from_stream_block(stream_block)
-            ##self.mapsElementsWidget.setModel(self.currentModel)
             self.progressBar.setRange(0, stream_block.height() - 1)
 
         self.xrfWidget.update_from_stream_block(stream_block)
         if self.last_row != stream_block.row():
-            status_str = ">" + str(stream_block.row()) + " " + str(stream_block.col()) + " : " + str(stream_block.height()) + " " + str(stream_block.width())
-            print(status_str)
+            #status_str = "> r " + str(stream_block.row()) + " c " + str(stream_block.col()) + " : h " + str(stream_block.height()) + " w " + str(stream_block.width())
+            #print(status_str)
             self.xrfWidget.redrawCounts()
             self.progressBar.setValue(stream_block.row())
             # _textEdit.clear()

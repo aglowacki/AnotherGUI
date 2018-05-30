@@ -48,7 +48,7 @@ POSSIBILITY OF SUCH DAMAGE.
 import PyQt5
 from PyQt5.QtWidgets import QWidget, QTabWidget, QHBoxLayout, QVBoxLayout, QComboBox, QSplitter, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from PyQt5.QtCore import QByteArray
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, qRgb
 import numpy as np
 
 class XrfCountsWidget(QWidget):
@@ -61,7 +61,10 @@ class XrfCountsWidget(QWidget):
         self.cb_element = QComboBox()
         self.scene = QGraphicsScene()
         self.graphicsView = QGraphicsView()
+        self.graphicsView.setScene(self.scene)
         self.pixmap = QPixmap()
+        self.imItem = self.scene.addPixmap(self.pixmap)
+        self.grayscale = [qRgb(j, j, j) for j in range(256)]
         self.createLayout()
 
     def createLayout(self):
@@ -69,9 +72,6 @@ class XrfCountsWidget(QWidget):
         #self.spectra_widget = FitSpectraWidget()
         self.cb_analysis.currentIndexChanged.connect(self.onAnalysisSelect)
         self.cb_element.currentIndexChanged.connect(self.onElementSelect)
-
-        self.scene.addPixmap(self.pixmap)
-        self.graphicsView.setScene(self.scene)
 
         hbox = QHBoxLayout()
         counts_layout = QVBoxLayout()
@@ -102,15 +102,14 @@ class XrfCountsWidget(QWidget):
 
         self.setLayout(counts_layout)
 
-    def onAnalysisSelect(self, name):
-        elementName = self.cb_element.currentText()
-        found_element = False
-
+    def onAnalysisSelect(self, index):
         try:
-            analysis_type = self.analyzed_counts[name]
+            name = self.cb_analysis.itemText(index)
+            elementName = self.cb_element.currentText()
+            found_element = False
             self.cb_element.clear()
             lastName = ''
-            for el_name, el_counts in analysis_type:
+            for el_name in self.analyzed_counts[name].keys():
                 self.cb_element.addItem(el_name)
                 if elementName == el_name:
                     found_element = True
@@ -124,15 +123,16 @@ class XrfCountsWidget(QWidget):
         except:
             return
 
-    def onElementSelect(self, name):
-        if type(name) == int:
-            return
+    def onElementSelect(self, index):
+        name = self.cb_element.itemText(index)
         analysisName = self.cb_analysis.currentText()
-        if len(analysisName) > 0 and len(name) > 0:
+        if len(analysisName) > 0 and name is not None:
             self.displayCounts(analysisName, name)
 
     def initialize_from_stream_block(self, block):
         self.analyzed_counts = {}
+        #an_index = self.cb_analysis.currentIndex()
+        #el_index = self.cb_analysis.currentIndex()
         self.cb_analysis.clear()
         self.cb_element.clear()
         cnt = 0
@@ -145,15 +145,24 @@ class XrfCountsWidget(QWidget):
                 if cnt < 1:
                     self.cb_element.addItem(el_name)
             cnt += 1
+        '''
+        try:
+            self.cb_analysis.setCurrentIndex(an_index)
+            self.cb_element.setCurrentIndex(el_index)
+        except:
+            pass
+        '''
+
 
     def update_from_stream_block(self, block):
         if len(self.analyzed_counts.keys()) < 1:
             self.initialize_from_stream_block(block)
         for name in block.fitting_blocks.keys():
             try:
-                xrf_counts = self.analyzed_counts[self.analysis_enum_to_str[name]]
-                for el_name in xrf_counts.keys():
-                    xrf_counts[el_name][block.row(), block.col()] = block.fitting_blocks[name].fit_counts[el_name]
+                #xrf_counts = self.analyzed_counts[self.analysis_enum_to_str[name]]
+                for el_name in self.analyzed_counts[self.analysis_enum_to_str[name]].keys():
+                    #print (' ' + el_name + ': ' + str( block.fitting_blocks[name].fit_counts[el_name] ) + ' ')
+                    self.analyzed_counts[self.analysis_enum_to_str[name]][el_name][block.row(), block.col()] = block.fitting_blocks[name].fit_counts[el_name]
             except:
                 pass
 
@@ -163,41 +172,16 @@ class XrfCountsWidget(QWidget):
     def displayCounts(self, analysis_type, element):
         if len(self.analyzed_counts.keys()) < 1 or len(element) < 1:
             return
-        fit_counts = {}
         try:
             fit_counts = self.analyzed_counts[analysis_type]
+            data = fit_counts[element]
+            max_min = data.max() - data.min()
+            data = (((data - data.min()) / max_min) * 255)
+            #data = data.astype(np.uint8)
+            data = np.require(data, np.uint8, 'C')
+            image = QImage(data.data, data.shape[1], data.shape[0], data.strides[0], QImage.Format_Indexed8)
+            image.setColorTable(self.grayscale)
+            self.imItem.setPixmap(QPixmap.fromImage(image.convertToFormat(QImage.Format_RGB32)))
         except:
             return
-        if len(fit_counts.keys()) > 0:
-            data = fit_counts[element].astype(np.uint8)
-            h, w = data.shape
-            COLORTABLE = [~((i + (i << 8) + (i << 16))) for i in range(255, -1, -1)]
-            '''
-            height = data.shape[0]
-            width = data.shape[1]
-            length = data.size
-            
-            counts_max = fit_counts[element].max()
-            counts_min = fit_counts[element].min()
-            max_min = counts_max - counts_min
-            i = 0
-            for row in range(height):
-                for col in range(width):
-                    data[i] = (((fit_counts.at(element)(row, col) - counts_min) / max_min) * 255)
-                    i+=1
-            grayscale = []
-
-            for j in range(255):
-                grayscale.append(qRgb(i, i, i))
-
-            image = QImage(data.constData(), width, height, width, QImage.Format_Indexed8)
-            image.setColorTable(grayscale)
-            '''
-            image = QImage(data.data, data.shape[1], data.shape[0], QImage.Format_Indexed8)
-            image.setColorTable(COLORTABLE)
-            image.ndarray = data
-            #self.graphicsView.scene().setPixmap(QPixmap.fromImage(image.convertToFormat(QImage.Format_RGB32)))
-            self.pixmap = QPixmap.fromImage(image)
-            self.graphicsView.setScene(self.scene)
-            #self.graphicsView.scene.setPixmap(QPixmap.fromImage(image.convertToFormat(QImage.Format_RGB32)))
 
