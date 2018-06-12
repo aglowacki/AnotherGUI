@@ -86,7 +86,7 @@ class XrfStreamViewer(StreamViewer):
         self.base_layout.addWidget(self.progressBar)
         self.setWindowTitle("XRF Stream Viewer")
 
-    def new_stream_block(self, stream_block):
+    def new_counts_block(self, stream_block):
         if stream_block.row() == 0 and stream_block.col() == 0:
             self.xrfWidget.initialize_from_stream_block(stream_block)
             self.progressBar.setRange(0, stream_block.height() - 1)
@@ -101,10 +101,20 @@ class XrfStreamViewer(StreamViewer):
             self.progressBar.update()
         self.last_row = stream_block.row()
 
+    def new_spectra_block(self, stream_block):
+        if stream_block.row() == 0 and stream_block.col() == 0:
+            #print(stream_block.spectra)
+            self.progressBar.setRange(0, stream_block.width() - 1)
+        status_str = "> r " + str(stream_block.row()) + " c " + str(stream_block.col()) + " : h " + str(stream_block.height()) + " w " + str(stream_block.width())
+        print(status_str)
+        self.progressBar.setValue(stream_block.col())
+        self.progressBar.update()
+
     def update_ip(self):
         if self.net_stream is not None:
             self.net_stream.stop()
         self.net_stream = NetStreamSource(self.qline_ip_addr.text())
-        self.net_stream.new_xrf_packet_trigger.connect(self.new_stream_block)
+        self.net_stream.new_xrf_counts_trigger.connect(self.new_counts_block)
+        self.net_stream.new_xrf_spectra_trigger.connect(self.new_spectra_block)
         self.net_stream.start()
 

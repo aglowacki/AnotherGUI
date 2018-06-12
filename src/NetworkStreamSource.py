@@ -50,7 +50,8 @@ import pyxrfmaps.pyxrfmaps
 import zmq
 
 class NetStreamSource(QThread):
-    new_xrf_packet_trigger = pyqtSignal(pyxrfmaps.StreamBlock)
+    new_xrf_counts_trigger = pyqtSignal(pyxrfmaps.StreamBlock)
+    new_xrf_spectra_trigger = pyqtSignal(pyxrfmaps.StreamBlock)
 
     def __init__(self, str_ip, port=43434):
         QThread.__init__(self)
@@ -64,6 +65,7 @@ class NetStreamSource(QThread):
         socket = context.socket(zmq.SUB)
         socket.connect(self.conn_str)
         socket.setsockopt(zmq.SUBSCRIBE, b"XRF-Counts")
+        socket.setsockopt(zmq.SUBSCRIBE, b"XRF-Spectra")
         #socket.setsockopt(zmq.RCVTIMEO, 1000)  # set timeout to 1000ms
         serializer = pyxrfmaps.io.net.BasicSerializer()
         while self._running:
@@ -71,7 +73,11 @@ class NetStreamSource(QThread):
             if(token == b"XRF-Counts"):
                 message = socket.recv()
                 new_packet = serializer.decode_counts(message, len(message))
-                self.new_xrf_packet_trigger.emit(new_packet)
+                self.new_xrf_counts_trigger.emit(new_packet)
+            if (token == b"XRF-Spectra"):
+                message = socket.recv()
+                new_packet = serializer.decode_spectra(message, len(message))
+                self.new_xrf_spectra_trigger.emit(new_packet)
         self.socket.close()
 
 
